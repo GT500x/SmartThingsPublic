@@ -87,7 +87,8 @@ def switchOnHandler(evt) {
 	log.debug "Switches: ${switches}"
 	
     def myMap = [:]
-	myMap.switches = switches.collect { [ id: it.id, level: it.currentState("level")?.value as Integer, value: it.currentState("switch").value] }
+	myMap.switches = switches.collect { [ id: it.id, level: it.supportedCommands.find{it.name == "setLevel"} ? 
+    	it.currentState("level")?.value as Integer : -1, value: it.currentState("switch").value] }
 
     log.debug "Switch information: ${myMap.switches}"
     
@@ -104,8 +105,11 @@ def autoOff(){
 def turnOnLightsAndSirens() {
 
 	switches.each {
-        it.on()
-        if (it.capabilities.find{it == "setLevel"}) {
+        if (it.currentState("switch").value != "on") {
+        	it.on()
+        }
+        
+        if (it.supportedCommands.find{it.name == "setLevel"} && it.currentState("level")?.value.toInteger() < 95) {
             it.setLevel(100)
         }
     }
@@ -117,21 +121,23 @@ def turnOffLights() {
 
 	state.switchMap.switches.each
     {
+        log.debug "Switch was previously ${it.value} and level was set to: ${it.level}"
+        if(it.level != -1)
+        {
+            def swLevel = switches.find{ sw -> sw.id == it.id}
+
+            if (swLevel.currentState("level")?.value.toInteger() != it.level)
+            {
+                log.debug "Setting level of [${swLevel.displayName}] back to ${it.level}."
+                swLevel.setLevel(it.level)
+            }
+        }  
+    
     	if(it.value == "off")
         {
         	def swOff = switches.find{ sw -> sw.id == it.id}
             log.debug "Turning off [${swOff.displayName}] because it was off before."
             swOff.off()
-        }
-        else
-        {
-        	log.debug "Switch was previously on and level was set to: ${it.level}"
-        	if(it.level > 0)
-            {
-                def swLevel = switches.find{ sw -> sw.id == it.id}
-                log.debug "Setting level of [${swLevel.displayName}] back to ${it.level}."
-                swLevel.setLevel(it.level)
-            }
         }
     }
 
