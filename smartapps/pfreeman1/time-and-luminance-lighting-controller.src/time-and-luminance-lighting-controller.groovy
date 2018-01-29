@@ -161,7 +161,7 @@ def luxCheckHandler (evt) {
         }
     }
     
-    log.trace "All conditions have qualified - turning lights on/off"
+    log.trace "[${luxSensor.displayName}] All conditions have qualified - turning lights on/off"
     unschedule(luxCheckHandler)
     controlLights()
 }

@@ -40,7 +40,7 @@ def installed() {
 
 def updated() {
 	log.debug "Updated with settings: ${settings}"
-	clearAtomicState()
+	cleanup()
 	unsubscribe()
 	initialize()
 }
@@ -61,10 +61,11 @@ def thermostatSetpointChange(evt) {
 
 def thermostatModeHandler(evt) {
 	if (atomicState.executing && evt.isStateChange()) {
-    	if (state.haveSetToOff && evt.value == "off") {
-        	log.debug "Received event indicating that the thermostat is off. Setting back to heat in 10s."
+    	if ((state.haveSetToOff || atomicState.haveRetried) && evt.value == "off") {
+        	log.debug "Received event indicating that the thermostat is off. Setting back to heat."
             atomicState.haveSetToOff = false
-            runIn(10, setHeatOn)
+            //runIn(10, setHeatOn)
+            setHeatOn()
         } else if (atomicState.haveSetToHeat && evt.value == "heat") {
             log.debug "Received event indicating that the thermostat is in heat mode."
 			runIn(5, setFanWithState)
@@ -89,7 +90,9 @@ def temperatureHandler(evt)
     	def ct_rounded = Math.round((ct - 0.05) * 10) / 10f
         if ( ct_rounded >= sp ) {
             atomicState.executing = true
-            log.debug "We are heating and we're at or over the target setpoint: Current heatingSetPoint: ${sp}, current thermostat temp ${ct}, (rounded down to neared 0.1): ${ct_rounded}"
+            runIn(2000, resetApp) // Putting this for now to reset the state of the app in case we experience an issue during execution.
+            log.debug "TEMP CHECK: EXCEEDED SETPOINT: We are heating and we're at or over the target setpoint: Current heatingSetPoint: ${sp}, current thermostat temp ${ct}, "\
+            + "(rounded down to neared 0.1): ${ct_rounded}"
             def currentFanMode = thermostat.currentState("thermostatFanMode")?.value
             if (currentFanMode == "fanOn") {
                 atomicState.fanOn = true
@@ -101,7 +104,7 @@ def temperatureHandler(evt)
             runIn(60, setHeatOn)	//Doing this just in case the thermostat doesn't send us an event telling us that it's off for some reason.
         }
         else {
-            log.debug "HEATING: TEMP OK: Current temp ${ct},(rounded down to nearest 0.1): ${ct_rounded}, target: ${sp} (${Math.round((sp - ct_rounded) * 100) / 100f} degrees to go), thermostatOperatingState: ${cs}, thermostatMode: ${thermostat.currentState("thermostatMode").value}"
+            log.debug "TEMP CHECK: OK: Current temp ${ct},(rounded down to nearest 0.1): ${ct_rounded}, target: ${sp} (${Math.round((sp - ct_rounded) * 100) / 100f} degrees to go), thermostatOperatingState: ${cs}, thermostatMode: ${thermostat.currentState("thermostatMode").value}"
     	}
 	}
 }
@@ -115,7 +118,8 @@ def setHeatOn() {
 	log.debug "Setting the thermostat back to heat mode"
     atomicState.haveSetToHeat = true
     thermostat.heat()
-
+	
+    runIn(60, refreshMode)
     runIn(120, checkHeatOn)
 }
 
@@ -126,39 +130,55 @@ def setFanWithState() {
     }
 }
 
+def refreshMode() {
+	thermostat.forceRefreshMode()
+}
+
 def checkHeatOn() {
 	def currentMode = thermostat.currentState("thermostatMode")?.value
 	if (currentMode != "heat") {
     	if (!atomicState.haveRetried) {
-        	log.warn "The thermostat didn't go back to heat mode. First trying a refresh..."
-        	thermostat.refresh()
-            
-            sendSmsMessage("604-442-7968", "The thermostat didn't go back to heat mode. Current mode: ${currentMode}" )
-            atomicState.haveRetried = true
+        	atomicState.haveRetried = true
             atomicState.retryCount++
+        	log.warn "The thermostat didn't go back to heat mode. First trying a refresh..."
+        	thermostat.forceRefreshMode()
+            
+            sendSmsMessage("604-442-7968", "The thermostat didn't go back to heat mode - trying a refresh. Current mode: ${currentMode}" )
+            runIn(30, checkHeatOn)
         }
         else if (atomicState.retryCount < 3) {
-            log.error "The thermostat still didn't go back into heat mode! Trying again..."
-            sendSmsMessage("604-442-7968", "The thermostat still didn't go back into heat mode! Current mode: ${currentMode}" )
+            log.error "The thermostat still didn't go back into heat mode! Trying setting to heat again."
+            sendSmsMessage("604-442-7968", "The thermostat still didn't go back into heat mode! Trying setting to heat again. Current mode: ${currentMode}" )
             atomicState.retryCount++
             setHeatOn()
         } else {
             log.error "The thermostat still didn't go back into heat mode! Not retrying anymore"
-            sendSmsMessage("604-442-7968", "The thermostat still didn't go back into heat mode! Current mode: ${currentMode}" )
-        	clearAtomicState()
+            sendSmsMessage("604-442-7968", "The thermostat still didn't go back into heat mode! No more retries. Current mode: ${currentMode}" )
+        	cleanup()
         }
     }
     else {
     	log.debug "Re-verified that the thermostat is in heat mode."
-        clearAtomicState()
+        if (atomicState.haveRetried) {
+        	sendSmsMessage("604-442-7968", "Yay! The thermostat is back in heat mode! Current mode: ${currentMode}" )
+        }
+        cleanup()
     }
 }
 
-def clearAtomicState() {
+def resetApp() {
+	log.warn "resetApp() was executed. What went wrong?"
+    sendSmsMessage("604-442-7968", "resetApp() was executed. What went wrong?" )
+    cleanup()
+}
+
+def cleanup() {
 	atomicState.fanOn = null
     atomicState.haveSetToHeat = null
     atomicState.executing = null
     atomicState.haveSetToOff = null
     atomicState.haveRetried = null
     atomicState.retryCount = 0
+    unschedule(resetApp)
+    //assert atomicState.retryCount instanceof Integer
 }

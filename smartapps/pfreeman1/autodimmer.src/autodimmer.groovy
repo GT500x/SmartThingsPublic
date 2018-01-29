@@ -177,7 +177,7 @@ def isTimeOK(dimmer) {
 def setDimmer(dimmer,isRamp){
 
 	if (dimmer.currentValue("switch") != "on") {
-    	log.debug "setDimmer: switch not on anymore! Ignoring this request"
+    	log.debug "[${dimmer.displayName}] setDimmer: switch not on anymore! Ignoring this request"
     	return
     }
     
@@ -186,16 +186,16 @@ def setDimmer(dimmer,isRamp){
     def contactOK = isContactOK(dimmer)
 	if (modeOK && timeOK && contactOK ) {
     	def newLevel = 0
-    	log.debug "${dimmer.displayName}: modeOK: True, timeOK: True"
+    	log.debug "[${dimmer.displayName}]: modeOK: True, timeOK: True"
     	//get its current dim level
     	def crntDimmerLevel = dimmer.currentValue("level").toInteger()
-        log.debug "Current dimmer level as reported by the device: ${crntDimmerLevel}"
+        log.debug "[${dimmer.displayName}]: Current dimmer level as reported by the device: ${crntDimmerLevel}"
     
     	//get currentLux reading
     	def crntLux = luxOmatic.currentValue("illuminance").toInteger()
        
         if (luxNoDimming && crntLux > luxNoDimming?.toInteger()) {
-        	log.debug "Current lux is higher than the noDimming threshold - changeRequired: False "
+        	log.debug "[${dimmer.displayName}] Current lux is higher than the noDimming threshold - changeRequired: False "
             return
         }
         
@@ -237,12 +237,12 @@ def setDimmer(dimmer,isRamp){
             state["${dimmer.id}_prevDimmerLvl"] = -1
             state["${dimmer.id}_prevRampLvl"] = -1
         } else {
-            log.info "${dimmer.displayName}, changeRequired: True, isRamp: ${isRamp}"
+            log.info "[${dimmer.displayName}] changeRequired: True, isRamp: ${isRamp}"
             //if (!this."${prefVar}") log.debug "useDefaults: true"
     		//else log.debug "useDefaults: False"
             if (isRamp) {
             	if (newDimmerLevel == 0){
-                	log.info "${dimmer.displayName}, currentLevel:${crntDimmerLevel}%, requestedLevel:${newDimmerLevel}%, currentLux:${crntLux}"
+                	log.info "[${dimmer.displayName}] currentLevel:${crntDimmerLevel}%, requestedLevel:${newDimmerLevel}%, currentLux:${crntLux}"
 	        		dimmer.off()
                 } else {
             		def rampRate  = dimmer.id
@@ -258,24 +258,24 @@ def setDimmer(dimmer,isRamp){
                 	}
         			
                     if ((state["${dimmer.id}_prevDimmerLvl"] ?: -1) == crntDimmerLevel) {
-                        log.warn "Dimmer didn't change to new level last time... trying 5% higher/lower this time..."
+                        log.warn "[${dimmer.displayName}] Dimmer didn't change to new level last time... trying 5% higher/lower this time..."
                         
                         if (crntDimmerLevel < newDimmerLevel){
                         	rampLevel = state["${dimmer.id}_prevRampLvl"] + 5
                             if (rampLevel >= 100) {
                                 rampLevel = 99
-                                log.error "We're at max dimmer level but still having issues!"
+                                log.error "[${dimmer.displayName}] We're at max dimmer level but still having issues!"
                         	}
                         } else {
                         	rampLevel = state["${dimmer.id}_prevRampLvl"] - 5
                             if (rampLevel <= 0) {
                                 rampLevel = 1
-                                log.error "We're at min dimmer level but still having issues!"
+                                log.error "[${dimmer.displayName}] We're at min dimmer level but still having issues!"
                         	}
                         }
                     }
                     
-                    log.info "${dimmer.displayName}, currentLevel:${crntDimmerLevel}%, requestedLevel:${newDimmerLevel}%, rampLevel:${rampLevel}%, currentLux:${crntLux}"
+                    log.info "[${dimmer.displayName}] currentLevel:${crntDimmerLevel}%, requestedLevel:${newDimmerLevel}%, rampLevel:${rampLevel}%, currentLux:${crntLux}"
                     state["${dimmer.id}_prevRampLvl"] = rampLevel
                     state["${dimmer.id}_prevDimmerLvl"] = crntDimmerLevel
                     dimmer.setLevel(rampLevel)
@@ -292,7 +292,7 @@ def setDimmer(dimmer,isRamp){
                     runIn(60,luxHandler)
                 }
             } else {
-            	log.info "${dimmer.displayName}, currentLevel:${crntDimmerLevel}%, requestedLevel:${newDimmerLevel}%, currentLux:${crntLux}"
+            	log.info "[${dimmer.displayName}] currentLevel:${crntDimmerLevel}%, requestedLevel:${newDimmerLevel}%, currentLux:${crntLux}"
             	if (newDimmerLevel == 0){
 	        		dimmer.off()
                 } else {
@@ -301,7 +301,7 @@ def setDimmer(dimmer,isRamp){
             }
         }
 	} else {
-        log.debug "${dimmer.displayName}, modeOK: ${modeOK}, timeOK: ${timeOK}"
+        log.debug "[${dimmer.displayName}] modeOK: ${modeOK}, timeOK: ${timeOK}"
     }
 }
 
@@ -316,18 +316,18 @@ def isContactOK(dimmer) {
     def contact = this."${prefVar}"
     
     if (contact) {
-    	log.debug "Checking contact: ${contact.displayName}"
+    	log.debug "[${dimmer.displayName}] Checking contact: ${contact.displayName}"
         def contactState = contact.currentValue("contact")
         if (contactState == "open") {
-        	log.debug "The contact is currently open. Dimming is paused."
+        	log.debug "[${dimmer.displayName}] The contact is currently open. Dimming is paused."
             return false
         }
         else {
-        	log.debug "The contact is currently closed, OK."
+        	log.debug "[${dimmer.displayName}] The contact is currently closed, OK."
         }
     }
     else {
-    	log.debug "isContactOK(): No contact associated with this dimmer."
+    	log.debug "[${dimmer.displayName}] isContactOK(): No contact associated with this dimmer."
     }
     return true
 }
